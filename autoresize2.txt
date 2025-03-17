@@ -1,20 +1,42 @@
-# This patch should fix mi_ext_a error in autoResize() function. Make sure to only write those partitions in the exclude parameter in config.ini that really exist and that should be excluded from the whole process.
+# This patch should fix mi_ext_a error in autoResize() function. 
+# Make sure to only write those partitions in the exclude parameter in config.ini that really exist 
+# and that should be excluded from the auto-resize process.
 
 autoResize(){
+    # Print the initiation message for auto-resize procedure
     printf " ===================================================\n\n%s: Initiating Auto-Resize procedure...\n\n" $app
+    
+    # Check if $exValue exists and count the number of fields in it, otherwise set skipNum to 0
     [ $exValue ] && skipNum=`echo "$exValue" | awk '{print NF}'` || skipNum=0
+    
+    # Calculate the available size by subtracting total partition size from the maximum total size
     availableSize=`echo $maxTotalSize $totalPartSize | awk '{print int($1 - $2)}'`
+    
+    # Calculate the extra size for each image by dividing available size by the number of images minus the skipped ones
     extraSize=`echo $availableSize $imgCount $skipNum | awk '{print int($1 / ($2 - $3))}'`
+    
+    # Loop through each group and image name pair from the lpdumpPath
     for o in `awk '/Group:/ {grp=$NF; print name "|" grp}{name=$NF}' $lpdumpPath`; do
         imgName=${o//|*}; groupName=${o//*|}; imgFile="$imgDir/$imgName.img"
+        
+        # Skip if the group name contains "cow"
         if [[ "$groupName" != *"cow"* ]]; then
-          [[ "$slotCount" -eq 3 && "$imgName" != *"$slotSuffix" ]] && continue
-          getCurrentSize $imgFile 1
-          newAutoSize=`echo $currentSize $extraSize | awk '{print int($1 + $2)}'`
-          newAutoSizeS=`echo $currentSize $extraSize | awk '{print int(($1 + $2) / 512)}'`
-          [[ "$exValue" != *"$imgName"* ]] && setSize $imgFile $newAutoSizeS"s" || newAutoSize=$currentSize
-          echo -n "--partition $imgName:none:$newAutoSize:$groupName ">>$argsPath
-          echo -n "--image $imgName=$imgFile ">>$argsPath
+            # Skip if slot count is 3 and image name does not contain the slot suffix
+            [[ "$slotCount" -eq 3 && "$imgName" != *"$slotSuffix" ]] && continue
+            
+            # Get the current size of the image file
+            getCurrentSize $imgFile 1
+            
+            # Calculate the new auto size by adding the extra size to the current size
+            newAutoSize=`echo $currentSize $extraSize | awk '{print int($1 + $2)}'`
+            newAutoSizeS=`echo $currentSize $extraSize | awk '{print int(($1 + $2) / 512)}'`
+            
+            # Set the new size if the image name is not in the exclude list, otherwise keep the current size
+            [[ "$exValue" != *"$imgName"* ]] && setSize $imgFile $newAutoSizeS"s" || newAutoSize=$currentSize
+            
+            # Append the partition and image information to argsPath
+            echo -n "--partition $imgName:none:$newAutoSize:$groupName ">>$argsPath
+            echo -n "--image $imgName=$imgFile ">>$argsPath
         fi
     done
 }
